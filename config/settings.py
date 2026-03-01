@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-5x29!wpmaale8q@u0q%d%@x@&(6w+=m$b4$r9t3!8s6(@0^81k
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 
 # Application definition
@@ -58,10 +58,34 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+REST_FRAMEWORK = {
+  'DEFAULT_AUTHENTICATION_CLASSES': [
+    'rest_framework.authentication.SessionAuthentication',
+    'rest_framework.authentication.TokenAuthentication',
+  ],
+  'DEFAULT_PERMISSION_CLASSES': [
+    'rest_framework.permissions.IsAuthenticatedOrReadOnly',
+  ],
+}
+
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8000",
+    "http://localhost:5174", 
+    "http://127.0.0.1:5174", 
+    "http://localhost:8000", 
+    "http://127.0.0.1:8000", 
+    ]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5174",
+    "http://127.0.0.1:5174", 
+    "http://localhost:8000", 
     "http://127.0.0.1:8000",
 ]
+_env_origins = os.getenv('CORS_ALLOWED_ORIGINS', '') 
+if _env_origins: 
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _env_origins.split(',') if o.strip()]
+
+CORS_ALLOWED_CREDENTIALS = True
 
 ROOT_URLCONF = 'config.urls'
 
@@ -99,7 +123,8 @@ DATABASES = {
         },
     }
 }
-
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
