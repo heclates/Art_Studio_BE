@@ -8,6 +8,10 @@ from .choices import (
     LOCATION_TITLE_TO_SLUG,
     CATEGORY_TITLE_TO_SLUG,
 )
+from django.contrib.auth import get_user_model
+from django.core import signing
+from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 
 logger = logging.getLogger(__name__)
 
@@ -199,3 +203,80 @@ class ReservationSerializer(serializers.ModelSerializer):
                 **validated_data,
             )
         return reservation
+
+    def to_representation(self, instance):
+        """
+        Customize the representation to include title and slug from related objects
+        """
+        data = super().to_representation(instance)
+
+        # Fill location fields
+        if instance.location:
+            data["location_title"] = (
+                instance.location.name
+            )  # Location uses 'name' field
+            data["location_slug"] = instance.location.slug
+        else:
+            data["location_title"] = None
+            data["location_slug"] = None
+
+        # Fill category fields
+        if instance.category:
+            data["category_title"] = instance.category.title
+            data["category_slug"] = instance.category.slug
+        else:
+            data["category_title"] = None
+            data["category_slug"] = None
+
+        # Fill direction fields
+        if instance.direction:
+            data["direction_title"] = instance.direction.title
+            data["direction_slug"] = instance.direction.slug
+        else:
+            data["direction_title"] = None
+            data["direction_slug"] = None
+
+        return data
+
+
+User = get_user_model()
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("id", "username", "email", "first_name", "last_name")
+
+
+class UserRegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ("username", "email", "password", "first_name", "last_name")
+
+    def create(self, validated_data):
+        password = validated_data.pop("password")
+        user = User(**validated_data)
+        user.set_password(password)
+        user.is_active = False
+        user.save()
+
+        self.send_verification_email(user)
+        return user
+
+    def send_verification_email(self, user):
+        signer = signing.TimestampSigner(salt=settings.EMAIL_VERIFICATION_SALT)
+        token = signer.sign(user.pk)
+
+        verify_url = f"{settings.FRONTEND_BASE_URL}/verify-email/?token={token}"
+
+        subject = "Подтверждение email"
+        text = f"Перейдите по ссылке: {verify_url}"
+        html = f"<p>Подтвердите email: <a href='{verify_url}'>Нажмите здесь</a></p>"
+
+        msg = EmailMultiAlternatives(
+            subject, text, settings.DEFAULT_FROM_EMAIL, [user.email]
+        )
+        msg.attach_alternative(html, "text/html")
+        msg.send()

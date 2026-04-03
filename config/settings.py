@@ -9,10 +9,9 @@ import os
 from datetime import timedelta
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / ".env")
 # SECURITY
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-please-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
@@ -32,6 +31,7 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "django_extensions",
+    "django_ses",
     # local apps
     "api",
 ]
@@ -168,7 +168,7 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@localhost")
 
 # Frontend base url (used to build verification links)
-FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5174")
 
 # Email verification settings
 EMAIL_VERIFICATION_SALT = os.getenv(
@@ -248,5 +248,3 @@ if DEBUG:
     logging.getLogger("django").info(
         "DEBUG mode is ON. Using DATABASES: %s", DATABASES["default"].get("ENGINE")
     )
-
-# End of settings.py
