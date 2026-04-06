@@ -13,7 +13,9 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-load_dotenv(BASE_DIR / ".env")
+# Load local .env only outside Render. On Render, use dashboard env vars.
+if not (os.getenv("RENDER") or os.getenv("RENDER_EXTERNAL_HOSTNAME")):
+    load_dotenv(BASE_DIR / ".env")
 # SECURITY
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-please-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
