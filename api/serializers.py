@@ -2,7 +2,7 @@
 import logging
 from rest_framework import serializers
 from django.db import transaction
-from .models import Reservation, Location, Category, Direction
+from .models import Profile, Reservation, Location, Category, Direction
 from .choices import (
     DIRECTION_TITLE_TO_SLUG,
     LOCATION_TITLE_TO_SLUG,
@@ -40,6 +40,13 @@ class ReservationSerializer(serializers.ModelSerializer):
     direction_id = serializers.IntegerField(required=False, allow_null=True)
     direction_title = serializers.CharField(required=False, allow_null=True)
     direction_slug = serializers.CharField(required=False, allow_null=True)
+
+    user_username = serializers.CharField(read_only=True)
+    user_email = serializers.CharField(read_only=True)
+    user_display_name = serializers.CharField(read_only=True)
+    user_first_name = serializers.CharField(read_only=True)
+    user_last_name = serializers.CharField(read_only=True)
+    user_phone = serializers.CharField(read_only=True)
 
     class Meta:
         model = Reservation
@@ -169,6 +176,29 @@ class ReservationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"location": "Unknown location."})
         attrs["location_obj"] = loc_obj
 
+        # prevent duplicate bookings for same user/place/day/time
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user and user.is_authenticated and loc_obj and attrs.get("day"):
+            qs = Reservation.objects.filter(
+                user=user,
+                location=loc_obj,
+                day=attrs["day"],
+            ).exclude(status="cancelled")
+
+            if attrs.get("time") is None:
+                qs = qs.filter(time__isnull=True)
+            else:
+                qs = qs.filter(time=attrs["time"])
+
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {"non_field_errors": ["duplicate_booking"]}
+                )
+
         # normalize time string "HH:MM" -> "HH:MM:SS"
         time_val = attrs.get("time")
         if time_val and isinstance(time_val, str) and len(time_val.split(":")) == 2:
@@ -192,6 +222,9 @@ class ReservationSerializer(serializers.ModelSerializer):
             "location_id",
             "location_title",
             "location_slug",
+            "direction",
+            "category",
+            "location",
         ):
             validated_data.pop(k, None)
 
@@ -206,15 +239,13 @@ class ReservationSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         """
-        Customize the representation to include title and slug from related objects
+        Customize the representation to include title and slug from related objects, а также user_first_name, user_last_name, user_phone
         """
         data = super().to_representation(instance)
 
         # Fill location fields
         if instance.location:
-            data["location_title"] = (
-                instance.location.name
-            )  # Location uses 'name' field
+            data["location_title"] = instance.location.name
             data["location_slug"] = instance.location.slug
         else:
             data["location_title"] = None
@@ -236,16 +267,54 @@ class ReservationSerializer(serializers.ModelSerializer):
             data["direction_title"] = None
             data["direction_slug"] = None
 
+        # User info for superuser context menu
+        if instance.user:
+            data["user_username"] = instance.user.username
+            data["user_email"] = instance.user.email
+            data["user_first_name"] = getattr(instance.user, "first_name", None)
+            data["user_last_name"] = getattr(instance.user, "last_name", None)
+            # phone from profile if exists
+            profile = getattr(instance.user, "profile", None)
+            data["user_phone"] = getattr(profile, "phone", None) if profile else None
+            full_name = instance.user.get_full_name().strip()
+            data["user_display_name"] = full_name or instance.user.username
+        else:
+            data["user_username"] = None
+            data["user_email"] = None
+            data["user_first_name"] = None
+            data["user_last_name"] = None
+            data["user_phone"] = None
+            data["user_display_name"] = None
+
         return data
 
 
 User = get_user_model()
 
 
+class ProfileNestedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ("full_name", "phone", "is_admin")
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
+    profile = ProfileNestedSerializer(read_only=True)
+    is_staff = serializers.BooleanField(read_only=True)
+    is_superuser = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = User
-        fields = ("id", "username", "email", "first_name", "last_name")
+        fields = (
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "is_staff",
+            "is_superuser",
+            "profile",
+        )
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):

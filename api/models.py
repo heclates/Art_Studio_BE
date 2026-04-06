@@ -1,7 +1,9 @@
 from django.db import models
+from django.db.models import Q
 from django.conf import settings
 
 User = settings.AUTH_USER_MODEL
+
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
@@ -12,6 +14,8 @@ class Profile(models.Model):
 
     def __str__(self):
         return self.full_name or str(self.user)
+
+
 # api/models.py (фрагменты)
 class Location(models.Model):
     name = models.CharField(max_length=255)
@@ -22,6 +26,7 @@ class Location(models.Model):
     def __str__(self):
         return self.name
 
+
 class Category(models.Model):
     slug = models.SlugField(unique=True)
     title = models.CharField(max_length=255)
@@ -29,13 +34,17 @@ class Category(models.Model):
     def __str__(self):
         return self.title
 
+
 class Direction(models.Model):
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='directions')
+    category = models.ForeignKey(
+        Category, on_delete=models.CASCADE, related_name="directions"
+    )
     title = models.CharField(max_length=255)
     slug = models.SlugField(max_length=200, unique=True, null=True, blank=True)
 
     def __str__(self):
         return f"{self.title} ({self.category.title})"
+
 
 class ArtBoxType(models.Model):
     slug = models.SlugField(unique=True)
@@ -44,6 +53,7 @@ class ArtBoxType(models.Model):
     def __str__(self):
         return self.title
 
+
 class DeliveryType(models.Model):
     slug = models.SlugField(unique=True)
     title = models.CharField(max_length=255)
@@ -51,20 +61,37 @@ class DeliveryType(models.Model):
     def __str__(self):
         return self.title
 
+
 class Reservation(models.Model):
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('confirmed', 'Confirmed'),
-        ('cancelled', 'Cancelled'),
+        ("pending", "Pending"),
+        ("confirmed", "Confirmed"),
+        ("cancelled", "Cancelled"),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reservations')
-    location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True, blank=True)
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
-    direction = models.ForeignKey(Direction, on_delete=models.SET_NULL, null=True, blank=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reservations",
+    )
+    location = models.ForeignKey(
+        Location, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    category = models.ForeignKey(
+        Category, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    direction = models.ForeignKey(
+        Direction, on_delete=models.SET_NULL, null=True, blank=True
+    )
     visit_type = models.CharField(max_length=50, blank=True, null=True)
-    art_box_type = models.ForeignKey(ArtBoxType, on_delete=models.SET_NULL, null=True, blank=True)
-    delivery_type = models.ForeignKey(DeliveryType, on_delete=models.SET_NULL, null=True, blank=True)
+    art_box_type = models.ForeignKey(
+        ArtBoxType, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    delivery_type = models.ForeignKey(
+        DeliveryType, on_delete=models.SET_NULL, null=True, blank=True
+    )
 
     fio = models.CharField(max_length=255, blank=True, null=True)
     parent_fio = models.CharField(max_length=255, blank=True, null=True)
@@ -79,11 +106,18 @@ class Reservation(models.Model):
     time = models.TimeField(blank=True, null=True)
     picture_number = models.CharField(max_length=50, blank=True, null=True)
 
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "location", "day", "time"],
+                condition=~Q(status="cancelled"),
+                name="unique_active_user_location_day_time",
+            )
+        ]
 
     def __str__(self):
         return f"Reservation #{self.id} — {self.fio or self.email or 'guest'}"

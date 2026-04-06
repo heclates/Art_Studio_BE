@@ -134,6 +134,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5174",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "https://feathure.d374ersqg5p6cr.amplifyapp.com",
 ]
 _env_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
 if _env_origins:
@@ -146,6 +147,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
+    "https://feathure.d374ersqg5p6cr.amplifyapp.com",
 ]
 _env_csrf = os.getenv("CSRF_TRUSTED_ORIGINS", "")
 if _env_csrf:

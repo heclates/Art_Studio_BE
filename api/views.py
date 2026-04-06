@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.core import signing
 from django.conf import settings
 from django.core.mail import send_mail
+from datetime import datetime, timedelta
 
 from urllib.parse import unquote
 
@@ -54,16 +55,28 @@ class LocationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
 
-class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = SimpleCategorySerializer
     permission_classes = [permissions.AllowAny]
 
+    def get_permissions(self):
+        """Only superusers can create/update/delete"""
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
 
-class DirectionViewSet(viewsets.ReadOnlyModelViewSet):
+
+class DirectionViewSet(viewsets.ModelViewSet):
     queryset = Direction.objects.all()
     serializer_class = SimpleDirectionSerializer
     permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        """Only superusers can create/update/delete"""
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -91,9 +104,16 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Filter reservations by current user for list action
+        Filter reservations by current user for list action.
+        Superusers/staff can see all reservations.
         """
         if self.action == "list":
+            if (
+                self.request.user.is_authenticated
+                and self.request.user.is_superuser
+                and self.request.user.is_staff
+            ):
+                return self.queryset
             return self.queryset.filter(user=self.request.user)
         return super().get_queryset()
 
@@ -105,6 +125,44 @@ class ReservationViewSet(viewsets.ModelViewSet):
             serializer.save(user=self.request.user)
         else:
             serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Allow user to cancel their reservation only if it's 24+ hours away.
+        Admin can cancel anytime.
+        """
+        reservation = self.get_object()
+
+        # Check ownership - user must own the reservation or be admin
+        if not request.user.is_superuser and reservation.user != request.user:
+            return Response(
+                {"detail": "You can only cancel your own reservations"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Check if lesson hasn't passed (non-admin users only)
+        if not request.user.is_superuser:
+            if reservation.day and reservation.time:
+                lesson_datetime = datetime.combine(reservation.day, reservation.time)
+                now = (
+                    datetime.now().replace(tzinfo=lesson_datetime.tzinfo)
+                    if lesson_datetime.tzinfo
+                    else datetime.now()
+                )
+
+                # Can only cancel if 24+ hours away
+                time_until_lesson = lesson_datetime - now
+                if time_until_lesson < timedelta(hours=24):
+                    return Response(
+                        {"detail": "Can only cancel 24 hours before the lesson"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        # Mark as cancelled instead of deleting
+        reservation.status = "cancelled"
+        reservation.save()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # -------------------------
@@ -193,11 +251,18 @@ class UserReservationsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        reservations = (
-            Reservation.objects.filter(user=request.user)
-            .select_related("location", "category", "direction")
-            .order_by("-created_at")
-        )
+        if (
+            request.user.is_authenticated
+            and request.user.is_superuser
+            and request.user.is_staff
+        ):
+            reservations = Reservation.objects.all()
+        else:
+            reservations = Reservation.objects.filter(user=request.user)
+
+        reservations = reservations.select_related(
+            "location", "category", "direction"
+        ).order_by("-created_at")
 
         serializer = ReservationSerializer(reservations, many=True)
         return Response(serializer.data)
