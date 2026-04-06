@@ -1,0 +1,14 @@
+# Backend runtime requirements for Django + DRF API
+# Python 3.13+
+Django>=6.0.2
+djangorestframework>=3.16.1
+djangorestframework-simplejwt>=5.2.2
+django-cors-headers>=4.9.0
+django-extensions>=3.4.0
+django-ses>=3.3.0
+dj-database-url>=2.2.0
+gunicorn>=23.0.0
+whitenoise>=6.7.0
+python-dotenv>=1.2.1
+psycopg2-binary>=2.9.11
+requests>=2.31.0
