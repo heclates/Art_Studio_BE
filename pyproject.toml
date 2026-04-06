@@ -7,7 +7,10 @@ requires-python = ">=3.13"
 dependencies = [
     "django>=6.0.2",
     "django-cors-headers>=4.9.0",
+    "dj-database-url>=2.2.0",
     "djangorestframework>=3.16.1",
+    "gunicorn>=23.0.0",
     "psycopg2-binary>=2.9.11",
     "python-dotenv>=1.2.1",
+    "whitenoise>=6.7.0",
 ]
