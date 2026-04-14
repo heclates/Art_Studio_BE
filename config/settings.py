@@ -171,7 +171,7 @@ def _normalize_origin(value: str) -> str:
 CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
-    "https://https://www.aleksandrova-art-studio.cz/",
+    "https://www.aleksandrova-art-studio.cz/",
     "https://feathure.d374ersqg5p6cr.amplifyapp.com",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
