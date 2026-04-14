@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, serializers, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -11,6 +11,7 @@ from django.template.loader import render_to_string
 from django.utils import translation
 
 from datetime import datetime, timedelta
+from urllib.parse import unquote
 
 from .models import Reservation, Location, Category, Direction
 from .serializers import (
@@ -20,7 +21,6 @@ from .serializers import (
 )
 
 User = get_user_model()
-
 
 # =========================
 # Simple Serializers
