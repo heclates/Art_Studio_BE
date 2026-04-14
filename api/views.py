@@ -167,11 +167,10 @@ class RegisterView(APIView):
         token = signer.sign(user.pk)
         verify_url = f"{settings.FRONTEND_BASE_URL}/verify-email/?token={token}"
 
-        # Определяем язык пользователя
         user_language = request.data.get("language", "ru")
 
-        if user_language == "en":
-            translation.activate("en")
+        if user_language == "cs":
+            translation.activate("cs")
             subject = "Potvrzení e-mailové adresy"
             html_template = "email/verify_email_cs.html"
             txt_template = "email/verify_email_cs.txt"
@@ -184,21 +183,27 @@ class RegisterView(APIView):
         context = {
             "user": user,
             "verify_url": verify_url,
-            "site_name": getattr(settings, "SITE_NAME", "Наш сервис"),
+            "site_name": getattr(settings, "SITE_NAME", "Art Studio"),
         }
 
-        html_message = render_to_string(html_template, context)
-        plain_message = render_to_string(txt_template, context)
+        try:
+            html_message = render_to_string(html_template, context)
+            plain_message = render_to_string(txt_template, context)
 
-        # Отправка письма
-        email = EmailMultiAlternatives(
-            subject=subject,
-            body=plain_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[user.email],
-        )
-        email.attach_alternative(html_message, "text/html")
-        email.send(fail_silently=False)
+            email = EmailMultiAlternatives(
+                subject=subject,
+                body=plain_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[user.email],
+            )
+            email.attach_alternative(html_message, "text/html")
+            email.send(fail_silently=False)
+
+            print(f"[EMAIL SUCCESS] Verification email sent to {user.email}")
+
+        except Exception as e:
+            print(f"[EMAIL FAILED] Could not send email to {user.email}: {str(e)}")
+            # Не прерываем регистрацию из-за проблем с почтой
 
         translation.deactivate()
 
