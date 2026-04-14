@@ -11,6 +11,11 @@ from datetime import datetime, timedelta
 
 from urllib.parse import unquote
 
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
+from django.utils.translation import gettext as _
+from django.utils import translation
+
 from .models import Reservation, Location, Category, Direction
 from .serializers import (
     ReservationSerializer,
@@ -175,94 +180,52 @@ class RegisterView(APIView):
 
     def post(self, request):
         serializer = UserRegisterSerializer(data=request.data)
-
         if not serializer.is_valid():
             return Response(serializer.errors, status=400)
 
         user = serializer.save()
-
-        # ❗ обязательно делаем пользователя неактивным
         user.is_active = False
         user.save(update_fields=["is_active"])
 
-        # 🔐 генерация токена
+        # Генерация токена подтверждения
         signer = signing.TimestampSigner(salt=settings.EMAIL_VERIFICATION_SALT)
         token = signer.sign(user.pk)
-
-        # 🔗 ссылка для фронтенда
         verify_url = f"{settings.FRONTEND_BASE_URL}/verify-email/?token={token}"
 
-        # 📧 отправка email
-        send_mail(
-            subject="Подтверждение email",
-            message=f"Перейдите по ссылке: {verify_url}",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
+        # Определяем язык
+        user_language = request.data.get("language", "ru")  # "ru" или "cs"
+
+        if user_language == "cs":
+            translation.activate("cs")
+            subject = "Potvrzení e-mailové adresy"
+            template_name = "email/verify_email_cs.html"
+            plain_template_name = "email/verify_email_cs.txt"  # отдельный plain-text
+        else:
+            translation.activate("ru")
+            subject = "Подтверждение email-адреса"
+            template_name = "email/verify_email_ru.html"
+            plain_template_name = "email/verify_email_ru.txt"
+
+        context = {
+            "user": user,
+            "verify_url": verify_url,
+            "site_name": getattr(settings, "SITE_NAME", "Наш сервис"),
+        }
+
+        # Рендерим HTML и plain-text
+        html_message = render_to_string(template_name, context)
+        plain_message = render_to_string(plain_template_name, context)
+
+        # Отправка письма
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=plain_message,  # plain text версия
+            from_email=settings.DEFAULT_FROM_EMAIL,  # рекомендую: "Название Сервиса <no-reply@tvoydomen.cz>"
+            to=[user.email],
         )
+        email.attach_alternative(html_message, "text/html")
+        email.send(fail_silently=False)
+
+        translation.deactivate()
 
         return Response({"detail": "verification_sent"}, status=201)
-
-
-class EmailVerifyView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        token = request.data.get("token")
-
-        if not token:
-            return Response({"detail": "Token missing"}, status=400)
-
-        # очистка
-        token = unquote(token).replace(" ", "").replace("\n", "")
-
-        signer = signing.TimestampSigner(salt=settings.EMAIL_VERIFICATION_SALT)
-
-        try:
-            user_pk = signer.unsign(token, max_age=settings.EMAIL_VERIFICATION_MAX_AGE)
-        except signing.SignatureExpired:
-            return Response({"detail": "Token expired"}, status=400)
-        except signing.BadSignature:
-            return Response({"detail": "Invalid token"}, status=400)
-
-        try:
-            user = User.objects.get(pk=user_pk)
-        except User.DoesNotExist:
-            return Response({"detail": "User not found"}, status=404)
-
-        if user.is_active:
-            return Response({"detail": "Already verified"}, status=200)
-
-        user.is_active = True
-        user.save(update_fields=["is_active"])
-
-        return Response({"detail": "Email verified"}, status=200)
-
-
-class ProfileView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        serializer = UserProfileSerializer(request.user)
-        return Response(serializer.data)
-
-
-class UserReservationsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        if (
-            request.user.is_authenticated
-            and request.user.is_superuser
-            and request.user.is_staff
-        ):
-            reservations = Reservation.objects.all()
-        else:
-            reservations = Reservation.objects.filter(user=request.user)
-
-        reservations = reservations.select_related(
-            "location", "category", "direction"
-        ).order_by("-created_at")
-
-        serializer = ReservationSerializer(reservations, many=True)
-        return Response(serializer.data)
