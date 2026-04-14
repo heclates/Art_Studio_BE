@@ -154,8 +154,14 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = UserRegisterSerializer(data=request.data)
+        # Добавляем language по умолчанию, если его нет
+        data = request.data.copy()
+        if "language" not in data:
+            data["language"] = "ru"  # или "cs" в зависимости от языка фронта
+
+        serializer = UserRegisterSerializer(data=data)
         if not serializer.is_valid():
+            print("Serializer errors:", serializer.errors)  # увидим в логах Render
             return Response(serializer.errors, status=400)
 
         user = serializer.save()
@@ -167,7 +173,7 @@ class RegisterView(APIView):
         token = signer.sign(user.pk)
         verify_url = f"{settings.FRONTEND_BASE_URL}/verify-email/?token={token}"
 
-        user_language = request.data.get("language", "ru")
+        user_language = data.get("language", "ru")
 
         if user_language == "cs":
             translation.activate("cs")
@@ -202,8 +208,7 @@ class RegisterView(APIView):
             print(f"[EMAIL SUCCESS] Verification email sent to {user.email}")
 
         except Exception as e:
-            print(f"[EMAIL FAILED] Could not send email to {user.email}: {str(e)}")
-            # Не прерываем регистрацию из-за проблем с почтой
+            print(f"[EMAIL FAILED] to {user.email}: {str(e)}")
 
         translation.deactivate()
 
