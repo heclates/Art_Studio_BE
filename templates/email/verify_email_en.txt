@@ -1,0 +1,11 @@
+Dobrý den,
+
+Děkujeme za registraci!
+
+Pro potvrzení vaší e-mailové adresy klikněte zde:
+{{ verify_url }}
+
+Pokud odkaz nefunguje, zkopírujte ho ručně do prohlížeče.
+
+S pozdravem,
+Tým {{ site_name|default:"Našeho servisu" }}

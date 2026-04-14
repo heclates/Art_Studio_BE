@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, serializers, status
+from rest_framework import viewsets, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -6,15 +6,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import get_user_model
 from django.core import signing
 from django.conf import settings
-from django.core.mail import send_mail
-from datetime import datetime, timedelta
-
-from urllib.parse import unquote
-
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
-from django.utils.translation import gettext as _
 from django.utils import translation
+
+from datetime import datetime, timedelta
 
 from .models import Reservation, Location, Category, Direction
 from .serializers import (
@@ -26,9 +22,9 @@ from .serializers import (
 User = get_user_model()
 
 
-# -------------------------
-# Simple serializers
-# -------------------------
+# =========================
+# Simple Serializers
+# =========================
 
 
 class SimpleLocationSerializer(serializers.ModelSerializer):
@@ -49,9 +45,9 @@ class SimpleDirectionSerializer(serializers.ModelSerializer):
         fields = ("id", "slug", "title", "category")
 
 
-# -------------------------
+# =========================
 # ViewSets
-# -------------------------
+# =========================
 
 
 class LocationViewSet(viewsets.ReadOnlyModelViewSet):
@@ -66,7 +62,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_permissions(self):
-        """Only superusers can create/update/delete"""
         if self.action in ["create", "update", "partial_update", "destroy"]:
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
@@ -78,7 +73,6 @@ class DirectionViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_permissions(self):
-        """Only superusers can create/update/delete"""
         if self.action in ["create", "update", "partial_update", "destroy"]:
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
@@ -89,10 +83,8 @@ class DirectionViewSet(viewsets.ModelViewSet):
 
         if not category:
             return qs
-
         if str(category).isdigit():
             return qs.filter(category__id=int(category))
-
         return qs.filter(category__slug=category)
 
 
@@ -108,10 +100,6 @@ class ReservationViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
-        """
-        Filter reservations by current user for list action.
-        Superusers/staff can see all reservations.
-        """
         if self.action == "list":
             if (
                 self.request.user.is_authenticated
@@ -123,29 +111,20 @@ class ReservationViewSet(viewsets.ModelViewSet):
         return super().get_queryset()
 
     def perform_create(self, serializer):
-        """
-        Set the user when creating a reservation if user is authenticated
-        """
-        if self.request.user and self.request.user.is_authenticated:
+        if self.request.user.is_authenticated:
             serializer.save(user=self.request.user)
         else:
             serializer.save()
 
     def destroy(self, request, *args, **kwargs):
-        """
-        Allow user to cancel their reservation only if it's 24+ hours away.
-        Admin can cancel anytime.
-        """
         reservation = self.get_object()
 
-        # Check ownership - user must own the reservation or be admin
         if not request.user.is_superuser and reservation.user != request.user:
             return Response(
                 {"detail": "You can only cancel your own reservations"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Check if lesson hasn't passed (non-admin users only)
         if not request.user.is_superuser:
             if reservation.day and reservation.time:
                 lesson_datetime = datetime.combine(reservation.day, reservation.time)
@@ -155,24 +134,20 @@ class ReservationViewSet(viewsets.ModelViewSet):
                     else datetime.now()
                 )
 
-                # Can only cancel if 24+ hours away
-                time_until_lesson = lesson_datetime - now
-                if time_until_lesson < timedelta(hours=24):
+                if lesson_datetime - now < timedelta(hours=24):
                     return Response(
                         {"detail": "Can only cancel 24 hours before the lesson"},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-        # Mark as cancelled instead of deleting
         reservation.status = "cancelled"
         reservation.save()
-
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# -------------------------
-# AUTH
-# -------------------------
+# =========================
+# AUTH Views
+# =========================
 
 
 class RegisterView(APIView):
@@ -187,24 +162,24 @@ class RegisterView(APIView):
         user.is_active = False
         user.save(update_fields=["is_active"])
 
-        # Генерация токена подтверждения
+        # Генерация токена
         signer = signing.TimestampSigner(salt=settings.EMAIL_VERIFICATION_SALT)
         token = signer.sign(user.pk)
         verify_url = f"{settings.FRONTEND_BASE_URL}/verify-email/?token={token}"
 
-        # Определяем язык
-        user_language = request.data.get("language", "ru")  # "ru" или "cs"
+        # Определяем язык пользователя
+        user_language = request.data.get("language", "ru")
 
-        if user_language == "cs":
-            translation.activate("cs")
+        if user_language == "en":
+            translation.activate("en")
             subject = "Potvrzení e-mailové adresy"
-            template_name = "email/verify_email_cs.html"
-            plain_template_name = "email/verify_email_cs.txt"  # отдельный plain-text
+            html_template = "email/verify_email_cs.html"
+            txt_template = "email/verify_email_cs.txt"
         else:
             translation.activate("ru")
             subject = "Подтверждение email-адреса"
-            template_name = "email/verify_email_ru.html"
-            plain_template_name = "email/verify_email_ru.txt"
+            html_template = "email/verify_email_ru.html"
+            txt_template = "email/verify_email_ru.txt"
 
         context = {
             "user": user,
@@ -212,15 +187,14 @@ class RegisterView(APIView):
             "site_name": getattr(settings, "SITE_NAME", "Наш сервис"),
         }
 
-        # Рендерим HTML и plain-text
-        html_message = render_to_string(template_name, context)
-        plain_message = render_to_string(plain_template_name, context)
+        html_message = render_to_string(html_template, context)
+        plain_message = render_to_string(txt_template, context)
 
         # Отправка письма
         email = EmailMultiAlternatives(
             subject=subject,
-            body=plain_message,  # plain text версия
-            from_email=settings.DEFAULT_FROM_EMAIL,  # рекомендую: "Название Сервиса <no-reply@tvoydomen.cz>"
+            body=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
             to=[user.email],
         )
         email.attach_alternative(html_message, "text/html")
@@ -229,3 +203,63 @@ class RegisterView(APIView):
         translation.deactivate()
 
         return Response({"detail": "verification_sent"}, status=201)
+
+
+class EmailVerifyView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token = request.data.get("token")
+        if not token:
+            return Response({"detail": "Token missing"}, status=400)
+
+        token = unquote(token).strip()
+
+        signer = signing.TimestampSigner(salt=settings.EMAIL_VERIFICATION_SALT)
+
+        try:
+            user_pk = signer.unsign(token, max_age=settings.EMAIL_VERIFICATION_MAX_AGE)
+        except signing.SignatureExpired:
+            return Response({"detail": "Token expired"}, status=400)
+        except signing.BadSignature:
+            return Response({"detail": "Invalid token"}, status=400)
+
+        try:
+            user = User.objects.get(pk=user_pk)
+        except User.DoesNotExist:
+            return Response({"detail": "User not found"}, status=404)
+
+        if user.is_active:
+            return Response({"detail": "Already verified"}, status=200)
+
+        user.is_active = True
+        user.save(update_fields=["is_active"])
+
+        return Response({"detail": "Email verified"}, status=200)
+
+
+class ProfileView(APIView):
+    """Профиль пользователя"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = UserProfileSerializer(request.user)
+        return Response(serializer.data)
+
+
+class UserReservationsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.is_superuser and request.user.is_staff:
+            reservations = Reservation.objects.all()
+        else:
+            reservations = Reservation.objects.filter(user=request.user)
+
+        reservations = reservations.select_related(
+            "location", "category", "direction"
+        ).order_by("-created_at")
+
+        serializer = ReservationSerializer(reservations, many=True)
+        return Response(serializer.data)
