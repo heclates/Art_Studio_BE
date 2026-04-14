@@ -167,37 +167,42 @@ def _normalize_origin(value: str) -> str:
     return value.strip().rstrip("/")
 
 
-# CORS / CSRF
-CORS_ALLOWED_ORIGINS = list(
-    {
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "https://feathure.d374ersqg5p6cr.amplifyapp.com",
-        _normalize_origin(FRONTEND_BASE_URL),
-    }
-)
-_env_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
-if _env_origins:
-    CORS_ALLOWED_ORIGINS = list(
-        set(
-            CORS_ALLOWED_ORIGINS
-            + [_normalize_origin(o) for o in _split_csv_env(_env_origins)]
-        )
-    )
+# ====================== CORS & CSRF ======================
+CORS_ALLOW_ALL_ORIGINS = False
 
-_default_amplify_regex = r"^https://[a-z0-9-]+\.d374ersqg5p6cr\.amplifyapp\.com$"
-CORS_ALLOWED_ORIGIN_REGEXES = [_default_amplify_regex]
-_env_origin_regexes = os.getenv("CORS_ALLOWED_ORIGIN_REGEXES", "")
-if _env_origin_regexes:
-    CORS_ALLOWED_ORIGIN_REGEXES = list(
-        set(CORS_ALLOWED_ORIGIN_REGEXES + _split_csv_env(_env_origin_regexes))
-    )
+CORS_ALLOWED_ORIGINS = [
+    "https://https://www.aleksandrova-art-studio.cz/",
+    "https://feathure.d374ersqg5p6cr.amplifyapp.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
+# Динамически добавляем FRONTEND_BASE_URL
+if FRONTEND_BASE_URL:
+    normalized = FRONTEND_BASE_URL.rstrip("/")
+    if normalized not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(normalized)
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://[a-z0-9-]+\.d374ersqg5p6cr\.amplifyapp\.com$",
+]
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS[:]
 
 CSRF_TRUSTED_ORIGINS = list(
     {
